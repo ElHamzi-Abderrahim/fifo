@@ -32,7 +32,6 @@ module testbench();
   	// Clock and Reset:
   	reg tb_clk ;
   	reg tb_resetn;
-  	reg [$clog2(`PARAM_VALUE):0] tb_sigout;
 
 
 	/* Clock generator: */
@@ -59,18 +58,18 @@ module testbench();
 
 	/* Read design outputs */
 	always @(posedge tb_clk) begin
-		$display("DUT sig_output = %d", tb_sigout);
+		// $display("DUT sig_output = %d", tb_sigout);
 	end
 
 
     /* DUT Instantiation: */
-    dummy_module 
-  		#(.MY_PARAM (`PARAM_VALUE) 
+    fifo_top 
+  		#(.FIFO_WIDTH (`FIFO_WIDTH),
+		  .FIFO_LENGTH (`FIFO_LENGTH)
         )
   	dut(
         .clk			(tb_clk),
-      	.reset_n		(tb_resetn),
-		.sig_output		(tb_sigout)
+      	.reset_n		(tb_resetn)
     );
 
   

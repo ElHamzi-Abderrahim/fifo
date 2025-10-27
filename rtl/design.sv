@@ -1,1 +1,1 @@
-`include "dummy_module.v"
+`include "fifo_top.sv"
