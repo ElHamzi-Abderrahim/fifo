@@ -1,12 +1,12 @@
 `ifndef TB_DEFINES_SV
 `define TB_DEFINES_SV
 
-    `ifndef FIFO_LENGTH
-        `define FIFO_LENGTH 4
+    `ifndef WORD_LENGTH
+        `define WORD_LENGTH 8
     `endif
 
-    `ifndef FIFO_WIDTH
-        `define FIFO_WIDTH 8
+    `ifndef ADDR_SIZE_B
+        `define ADDR_SIZE_B 3
     `endif
 
 `endif
