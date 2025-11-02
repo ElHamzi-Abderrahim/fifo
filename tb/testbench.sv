@@ -26,7 +26,8 @@
 
 		/* Local Parameters: */
 		localparam 	CLK_PERIOD = 10;
-		localparam  INIT_DELAY_RST = 7; // Initial delay before deasserting the reset (e.g 10ns)
+		localparam  INIT_DELAY_RST = 5; // Initial delay before deasserting the reset (e.g 5ns)
+		localparam  SIM_TIME = 200; 		// Simulation time
 
 
 		/* Signals Declaration: */
@@ -36,9 +37,9 @@
 
 		// DUT signals
 		reg                   		s_wr ;
-		reg	 [`ADDR_SIZE_B-1:0]  	s_w_data ;
+		reg	 [`WORD_LENGTH-1:0]  	s_w_data ;
 		reg                   		s_rd ;
-		reg  [`ADDR_SIZE_B-1:0]  	s_r_data ;
+		reg  [`WORD_LENGTH-1:0]  	s_r_data ;
 		reg                  			s_empty ;
 		reg                  			s_full ;
 
@@ -55,8 +56,11 @@
 		reg [`WORD_LENGTH-1:0] fifo_wr_data ;
 		reg [`WORD_LENGTH-1:0] fifo_rd_data ;
 
+		// Variable to hold random data
+		bit [`WORD_LENGTH-1:0] rand_data ;
 
-		/* Clock generator: */
+
+		/* Clock generator */
 		initial tb_clk = 0 ;
 		always #(CLK_PERIOD/2) tb_clk = ~tb_clk;
 
@@ -68,7 +72,7 @@
 		end
 
 
-		/* DUT Instantiation: */
+		/* DUT Instantiation */
 		fifo_top 	#(.WORD_LENGTH(`WORD_LENGTH),
 								.ADDR_SIZE_B(`ADDR_SIZE_B)
 							) 
@@ -83,7 +87,7 @@
 				.full			(s_full)						
 		);
 
-		/* Reset generator: */
+		/* Reset DUT */
 		initial begin
 			tb_resetn = 1;
 			#1 ;
@@ -93,19 +97,54 @@
 		end
 
 
-		/* Run for 300ns: */
+		/* Initialize signals */
 		initial begin
-			#300ns ;
+			s_wr			= 1'b0 ;
+			s_rd			= 1'b0 ;
+			s_w_data	= '0 ;
+		end
+
+		/* Run for 300ns */
+		initial begin
+			#(SIM_TIME) ;
 			$finish ;
 		end
 
 
 		/* Perfrom W/R operations */
-		always @(posedge tb_clk) begin
-			
+		always begin
+			fork
+				begin // Write to the FIFO
+					for (int i = 0; i < (2**`ADDR_SIZE_B) ; i++ ) begin 
+						// Generate random data
+						rand_data = $urandom_range(0, (2**`WORD_LENGTH)-1) ;
+						
+						// push data to the queue
+						queue_fifo.push_front(rand_data) ;
+
+						// push data to the fifo
+						$display("[%0t] PUSHING : data = %d", $time, rand_data);
+						
+						@(posedge tb_clk) ;
+						s_wr      = 1'b1 ;
+						s_w_data  = rand_data ;
+						
+						@(posedge tb_clk) ;
+						s_wr      = 1'b0 ;
+						s_w_data  = '0 ;
+					end
+				end
+
+				begin // Monitor Empty/Full signals
+					@(posedge tb_clk) ;
+					$display("[%0t] MONITORING: Empty = %d ; Full = %d", $time, s_empty, s_full);
+					$display("[%0t] MONITORING: dut.write_ptr_reg = %d", $time, dut.w_ptr_reg);
+				end
+
+			join
+			// write_to_fifo(.clk(tb_clk), .data(rand_data), .w_data(s_w_data), .wr(s_wr))  ;
+
 		end
-
-
 
 		
 	endmodule
