@@ -34,13 +34,192 @@
     reg [WORD_LENGTH-1:0] r_ptr_reg, r_ptr_next, r_ptr_plus_1; 
     reg [WORD_LENGTH-1:0] w_ptr_reg, w_ptr_next, w_ptr_plus_1; 
 
+    // State type
+    typedef enum logic [1:0] {EMPTY_STATE, WRITE_STATE, FULL_STATE, READ_STATE} state_t ;
+
     // Empty and Full registers
-    reg empty_reg;
-    reg full_reg ;
+    reg empty_next, empty_reg;
+    reg full_next, full_reg ;
 
     // Control R/W signals
     wire w_en ; // Read enable
     wire r_en ; // Write enable
+
+    // Current/Next state
+    state_t state_reg, state_next ;
+
+
+    /* Next State Logic */
+    always_comb begin : next_state_logic
+      case (state_reg)
+        EMPTY_STATE: begin
+          case({wr,rd})
+            2'b10 : begin
+            state_next = WRITE_STATE ;
+            end 
+            2'b01 : begin
+              state_next = EMPTY_STATE ;
+            end
+            default: 
+              state_next = EMPTY_STATE ;
+          endcase
+        end
+
+        WRITE_STATE: begin
+          case({wr,rd})
+            2'b10 : begin
+              if(w_ptr_plus_1 == r_ptr_reg) begin
+                state_next = FULL_STATE ;
+              end else begin
+                state_next = WRITE_STATE ;
+              end
+            end 
+            2'b01 : begin
+              state_next = READ_STATE ;
+            end
+            default: 
+              state_next = WRITE_STATE ;
+          endcase
+        end
+
+        FULL_STATE: begin
+          case({wr,rd})
+            2'b01 : begin
+            state_next = READ_STATE ;
+            end 
+            2'b10 :  begin
+              state_next = FULL_STATE ;
+            end
+            default: 
+              state_next = FULL_STATE ;
+          endcase
+        end
+        
+        READ_STATE: begin
+          case({wr,rd})
+            2'b01 : begin
+              if(r_ptr_plus_1 == w_ptr_reg) begin
+                state_next = EMPTY_STATE ;
+              end else begin
+                state_next = READ_STATE ;
+              end
+            end 
+            2'b10 :  begin
+              state_next = WRITE_STATE ;
+            end
+            default: 
+              state_next = READ_STATE ;
+          endcase
+        end 
+        default: 
+          state_next = EMPTY_STATE ; 
+      endcase
+    end
+    
+    /* State Register */
+    always_ff @( posedge clk, negedge reset_n ) begin : state_register
+      if(!reset_n) begin
+        state_reg  <= EMPTY_STATE ;
+        r_ptr_reg  <= '0 ;
+        w_ptr_reg  <= '0 ;
+      end else begin
+        state_reg  <= state_next ;
+        empty_reg  <= empty_next ;
+        full_reg   <= full_next  ;
+      end
+    end
+
+    /* Output Logic (FSM Moore type) */
+    always_comb begin : output_logic
+      w_ptr_plus_1 = w_ptr_reg + 1 ; 
+      r_ptr_plus_1 = r_ptr_reg + 1 ; 
+
+      case (state_reg)
+        EMPTY_STATE: begin
+          empty = 1'b1 ;
+          array_reg[w_ptr_reg]  = w_data ;
+          w_ptr_next            = w_ptr_plus_1 ;
+          // if(wr) begin // Write at the same clock cycle the wr is asserted
+          // end
+        end
+
+        WRITE_STATE: begin
+          empty                 = 1'b0 ;
+          full                  = 1'b0 ;
+          array_reg[w_ptr_reg]  = w_data ;
+          w_ptr_next            = w_ptr_plus_1 ;
+        end
+
+        FULL_STATE: begin
+          empty                 = 1'b0 ;
+          full                  = 1'b1 ;
+        end
+
+        READ_STATE: begin
+          empty       = 1'b0 ;
+          full        = 1'b0 ;
+          r_data      = array_reg[r_ptr_reg];
+          r_ptr_next  = r_ptr_plus_1 ;
+        end
+        default: begin
+          empty       = 1'b0 ;
+          full        = 1'b0 ;
+        end
+      endcase
+    end
+
+
+
+
+
+
+  // `define OLD_CODE
+  `ifdef OLD_CODE
+
+    /* Next-State Logic (Combinational) */
+    always_comb begin : next_state_logic
+      case ({wr,rd})
+        2'b10: // Write Operation
+          if(w_en) begin
+            w_ptr_next            <= w_ptr_reg + 1; 
+          end
+        2'b01: // Read Operation
+          if(r_en) begin
+            r_ptr_next  <= r_ptr_reg + 1; 
+          end
+        default: begin // Nor Read/Write r/w_ptr regs keeps previous values
+          r_ptr_next <= r_ptr_reg ;
+          w_ptr_next <= w_ptr_reg ;
+        end 
+      endcase      
+    end
+
+
+    /* State Register */
+    always_ff @(posedge clk, negedge reset_n) begin : state_register
+      if(!reset_n) begin
+        r_ptr_reg <= '0 ;
+        w_ptr_reg <= '0 ;
+        full_reg  <= 1'b0 ;
+        empty_reg <= 1'b1 ;
+      end 
+      else begin
+        w_ptr_reg <= w_ptr_next ;
+        r_ptr_reg <= r_ptr_next ;
+      end // else
+    end // always_ff
+
+
+    /* Output Logic (Combinational) */
+    always_comb begin : output_logic
+      // Control W/R enable signals
+      w_en = wr & ~full_reg ; 
+      r_en = rd & ~empty_reg ; 
+      
+    end
+  `endif // OLD_CODE
+
+  `ifdef ANOTHER_OLD_CODE
 
     // Assign empty/full reg to outputs signals
     assign empty = empty_reg ;
@@ -98,6 +277,8 @@
         empty_reg <= (r_ptr_plus_1 == w_ptr_reg) ;
       end // else
     end // always_ff
+  
+  `endif // ANOTHER_OLD_CODE 
 
   endmodule
 
