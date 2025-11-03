@@ -6,6 +6,60 @@
    File    		: fifo_top.sv
 */ 
 
+
+/* 
+  NOTES:
+      O : Empty place
+      X : Full  place
+
+          rd_ptr
+          wr_ptr
+             |
+             v
+        >----O----O----O----O----O----O---v
+        |                                 |
+        +---------------------------------+
+
+			rd_ptr: The place to be read.
+			wr_ptr: The place to written to.
+
+			- After performing 1 Write:
+          rd_ptr
+                wr_ptr
+             |    |
+             v    v
+        >----X----O----O----O----O----O---v
+        |                                 |
+        +---------------------------------+
+
+			- After performing 1 Read:
+                rd_ptr
+                wr_ptr
+                  |
+                  v
+        >----O----O----O----O----O----O---v
+        |                                 |
+        +---------------------------------+
+
+			- Full state:
+			  The condition to detect Full state: (wr_ptr+1) == rd_ptr
+                  wr_ptr    rd_ptr
+                       |    |
+                       v    v
+        >----X----X----X----X----X----X---v
+        |                                 |
+        +---------------------------------+
+      
+      - Empty state:
+			  The condition to detect Full state: (rd_ptr+1) == wr_ptr
+                  rd_ptr    wr_ptr
+                       |    |
+                       v    v
+        >----O----O----O----O----O----O---v
+        |                                 |
+        +---------------------------------+
+*/
+
 `ifndef FIFO_TOP_SV
   `define FIFO_TOP_SV
 
@@ -28,11 +82,11 @@
           );
 
     // Array of regs to store the elements of the fifo
-    reg [ADDR_SIZE_B-1:0] array_reg [(2**ADDR_SIZE_B)-1:0]  ; // Unpacked array 
+    reg [WORD_LENGTH-1:0] array_reg [(2**ADDR_SIZE_B)-1:0]  ; // Unpacked array 
 
     // Pointers to be used for R/W operations
-    reg [WORD_LENGTH-1:0] r_ptr_reg, r_ptr_next, r_ptr_plus_1; 
-    reg [WORD_LENGTH-1:0] w_ptr_reg, w_ptr_next, w_ptr_plus_1; 
+    reg [ADDR_SIZE_B-1:0] r_ptr_reg, r_ptr_next, r_ptr_plus_1; 
+    reg [ADDR_SIZE_B-1:0] w_ptr_reg, w_ptr_next, w_ptr_plus_1; 
 
     // State type
     typedef enum logic [1:0] {EMPTY_STATE, WRITE_STATE, FULL_STATE, READ_STATE} state_t ;
@@ -124,23 +178,25 @@
         w_ptr_reg  <= '0 ;
       end else begin
         state_reg  <= state_next ;
-        empty_reg  <= empty_next ;
-        full_reg   <= full_next  ;
+        r_ptr_reg  <= r_ptr_next ;
+        w_ptr_reg  <= w_ptr_next ;
       end
     end
 
     /* Output Logic (FSM Moore type) */
     always_comb begin : output_logic
-      w_ptr_plus_1 = w_ptr_reg + 1 ; 
-      r_ptr_plus_1 = r_ptr_reg + 1 ; 
+      w_ptr_plus_1 = w_ptr_reg + 1 ;
+      r_ptr_plus_1 = r_ptr_reg + 1 ;
+
+      r_ptr_next = r_ptr_reg ;
+      w_ptr_next = w_ptr_reg ;
+
+      r_data = '0 ; 
 
       case (state_reg)
         EMPTY_STATE: begin
           empty = 1'b1 ;
-          array_reg[w_ptr_reg]  = w_data ;
-          w_ptr_next            = w_ptr_plus_1 ;
-          // if(wr) begin // Write at the same clock cycle the wr is asserted
-          // end
+          full  = 1'b0 ;
         end
 
         WRITE_STATE: begin
@@ -151,8 +207,8 @@
         end
 
         FULL_STATE: begin
-          empty                 = 1'b0 ;
           full                  = 1'b1 ;
+          empty                 = 1'b0 ;
         end
 
         READ_STATE: begin
@@ -167,118 +223,6 @@
         end
       endcase
     end
-
-
-
-
-
-
-  // `define OLD_CODE
-  `ifdef OLD_CODE
-
-    /* Next-State Logic (Combinational) */
-    always_comb begin : next_state_logic
-      case ({wr,rd})
-        2'b10: // Write Operation
-          if(w_en) begin
-            w_ptr_next            <= w_ptr_reg + 1; 
-          end
-        2'b01: // Read Operation
-          if(r_en) begin
-            r_ptr_next  <= r_ptr_reg + 1; 
-          end
-        default: begin // Nor Read/Write r/w_ptr regs keeps previous values
-          r_ptr_next <= r_ptr_reg ;
-          w_ptr_next <= w_ptr_reg ;
-        end 
-      endcase      
-    end
-
-
-    /* State Register */
-    always_ff @(posedge clk, negedge reset_n) begin : state_register
-      if(!reset_n) begin
-        r_ptr_reg <= '0 ;
-        w_ptr_reg <= '0 ;
-        full_reg  <= 1'b0 ;
-        empty_reg <= 1'b1 ;
-      end 
-      else begin
-        w_ptr_reg <= w_ptr_next ;
-        r_ptr_reg <= r_ptr_next ;
-      end // else
-    end // always_ff
-
-
-    /* Output Logic (Combinational) */
-    always_comb begin : output_logic
-      // Control W/R enable signals
-      w_en = wr & ~full_reg ; 
-      r_en = rd & ~empty_reg ; 
-      
-    end
-  `endif // OLD_CODE
-
-  `ifdef ANOTHER_OLD_CODE
-
-    // Assign empty/full reg to outputs signals
-    assign empty = empty_reg ;
-    assign full  = full_reg ;
-
-    // Main process or R/W from/to the FIFO internal array (array_reg[])
-    always_ff @(posedge clk, negedge reset_n) begin : process_rw_access
-      if(!reset_n) begin
-        // array_reg <= '{'0} ;
-        r_ptr_reg <= '0 ;
-        w_ptr_reg <= '0 ;
-      end 
-      else begin
-        w_ptr_reg <= w_ptr_next ;
-        r_ptr_reg <= r_ptr_next ;
-
-        // Store the next address of the current r/w pointer (to be used to determine if empty/full state) 
-        r_ptr_plus_1 <= r_ptr_reg + 1 ;
-        w_ptr_plus_1 <= w_ptr_reg + 1 ;
-        
-        case ({wr,rd})
-          2'b10: // Write Operation
-            // Check if write is enabled (when FIFO is not full)
-            if(w_en) begin
-              array_reg[w_ptr_reg]  <= w_data ;
-              w_ptr_next            <= w_ptr_reg + 1; 
-            end
-          2'b01: // Read Operation
-            // Check if read is enabled (when FIFO is not empty)
-            if(r_en) begin
-              r_data      <= array_reg[r_ptr_reg] ;
-              r_ptr_next  <= r_ptr_reg + 1; 
-            end
-          default: begin // Nor Read/Write r/w_ptr regs keeps previous values
-            r_ptr_next <= r_ptr_reg ;
-            w_ptr_next <= w_ptr_reg ;
-          end 
-        endcase
-      end // else
-    end // always_ff
-
-    // Control W/R enable signals
-    assign w_en = (!full_reg)  ; 
-    assign r_en = (!empty_reg) ; 
-
-    // Process to control the empty/full states
-    always_ff @( posedge clk, negedge reset_n) begin : control_rw_en
-      if(!reset_n) begin
-        empty_reg <= 1'b1 ;
-        full_reg  <= 1'b0 ;
-      end else begin
-        // full  is detected when : write pointer -> read pointer
-        full_reg  <= (w_ptr_plus_1 == r_ptr_reg) ; 
-        // empty is detected when : read pointer -> write pointer
-        empty_reg <= (r_ptr_plus_1 == w_ptr_reg) ;
-      end // else
-    end // always_ff
-  
-  `endif // ANOTHER_OLD_CODE 
 
   endmodule
 
