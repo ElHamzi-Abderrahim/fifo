@@ -24,8 +24,7 @@
 			wr_ptr: The place to written to.
 
 			- After performing 1 Write:
-          rd_ptr
-                wr_ptr
+        rd_ptr    wr_ptr
              |    |
              v    v
         >----X----O----O----O----O----O---v
@@ -41,21 +40,21 @@
         |                                 |
         +---------------------------------+
 
-			- Full state:
+			- Full state (One clock cycle before):
 			  The condition to detect Full state: (wr_ptr+1) == rd_ptr
                   wr_ptr    rd_ptr
                        |    |
                        v    v
-        >----X----X----X----X----X----X---v
+        >----X----X----O----X----X----X---v
         |                                 |
         +---------------------------------+
       
-      - Empty state:
+      - Empty state (One clock cycle before):
 			  The condition to detect Full state: (rd_ptr+1) == wr_ptr
                   rd_ptr    wr_ptr
                        |    |
                        v    v
-        >----O----O----O----O----O----O---v
+        >----O----O----X----O----O----O---v
         |                                 |
         +---------------------------------+
 */
@@ -90,14 +89,6 @@
 
     // State type
     typedef enum logic [1:0] {EMPTY_STATE, WRITE_STATE, FULL_STATE, READ_STATE} state_t ;
-
-    // Empty and Full registers
-    reg empty_next, empty_reg;
-    reg full_next, full_reg ;
-
-    // Control R/W signals
-    wire w_en ; // Read enable
-    wire r_en ; // Write enable
 
     // Current/Next state
     state_t state_reg, state_next ;
@@ -202,8 +193,10 @@
         WRITE_STATE: begin
           empty                 = 1'b0 ;
           full                  = 1'b0 ;
-          array_reg[w_ptr_reg]  = w_data ;
-          w_ptr_next            = w_ptr_plus_1 ;
+          if(wr) begin
+            array_reg[w_ptr_reg]  = w_data ;
+            w_ptr_next            = w_ptr_plus_1 ;
+          end 
         end
 
         FULL_STATE: begin
@@ -214,8 +207,10 @@
         READ_STATE: begin
           empty       = 1'b0 ;
           full        = 1'b0 ;
-          r_data      = array_reg[r_ptr_reg];
-          r_ptr_next  = r_ptr_plus_1 ;
+          if(rd) begin
+            r_data      = array_reg[r_ptr_reg];
+            r_ptr_next  = r_ptr_plus_1 ;\
+          end
         end
         default: begin
           empty       = 1'b0 ;

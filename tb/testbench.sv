@@ -6,6 +6,7 @@
    File    			: testbench.v
 */ 
 
+
 `ifndef TESTBENCH_SV
 	`define TESTBENCH_SV
 
@@ -27,7 +28,7 @@
 		/* Local Parameters: */
 		localparam 	CLK_PERIOD = 10;
 		localparam  INIT_DELAY_RST = 5; // Initial delay before deasserting the reset (e.g 5ns)
-		localparam  SIM_TIME = 200; 		// Simulation time
+		localparam  SIM_TIME = 400; 		// Simulation time
 
 
 		/* Signals Declaration: */
@@ -87,15 +88,6 @@
 				.full			(s_full)						
 		);
 
-		/* Reset DUT */
-		initial begin
-			tb_resetn = 1;
-			#1 ;
-			tb_resetn = 0;
-			#(INIT_DELAY_RST) ;
-			tb_resetn = 1;
-		end
-
 
 		/* Initialize signals */
 		initial begin
@@ -104,7 +96,7 @@
 			s_w_data	= '0 ;
 		end
 
-		/* Run for 300ns */
+		/* Finishing the simulation after SIM_TIME delay */
 		initial begin
 			#(SIM_TIME) ;
 			$finish ;
@@ -112,10 +104,18 @@
 
 
 		/* Perfrom W/R operations */
-		always begin
-			fork
-				begin // Write to the FIFO
-					for (int i = 0; i < (2**`ADDR_SIZE_B) ; i++ ) begin 
+		initial begin
+			// Reset the DUT
+			tb_resetn = 1;
+			#1 ;
+			tb_resetn = 0;
+			#(INIT_DELAY_RST) ;
+			tb_resetn = 1;
+			
+			
+			for (int i = 0; i < (2**`ADDR_SIZE_B) ; i++ ) begin 
+				fork
+					begin // Write to the FIFO
 						// Generate random data
 						rand_data = $urandom_range(0, (2**`WORD_LENGTH)-1) ;
 						
@@ -123,26 +123,48 @@
 						queue_fifo.push_front(rand_data) ;
 
 						// push data to the fifo
-						$display("[%0t] PUSHING : data = %d", $time, rand_data);
+						$display("[%0t] PUSHING : data = %d ", $time, rand_data);
 						
 						@(posedge tb_clk) ;
 						s_wr      = 1'b1 ;
 						s_w_data  = rand_data ;
-						
+						@(posedge tb_clk) ;
 						@(posedge tb_clk) ;
 						s_wr      = 1'b0 ;
 						s_w_data  = '0 ;
 					end
-				end
 
-				begin // Monitor Empty/Full signals
-					@(posedge tb_clk) ;
-					$display("[%0t] MONITORING: Empty = %d ; Full = %d", $time, s_empty, s_full);
-					$display("[%0t] MONITORING: dut.write_ptr_reg = %d", $time, dut.w_ptr_reg);
-				end
+					begin // Monitor the DUT
+						@(posedge s_wr) ;
+						@(posedge tb_clk) ;
+						$display("[%0t] MONITORING: Empty = %d ; Full = %d ", $time, s_empty, s_full);
+						$display("[%0t] MONITORING: dut.write_ptr_reg = %d ", $time, dut.w_ptr_reg);
+					end
 
-			join
-			// write_to_fifo(.clk(tb_clk), .data(rand_data), .w_data(s_w_data), .wr(s_wr))  ;
+				join
+			end
+
+			for (int i = 0; i < (2**`ADDR_SIZE_B) ; i++ ) begin 
+				begin // READ to the FIFO
+					fork
+						begin
+							@(posedge tb_clk) ;
+							s_rd      = 1'b1 ;
+							@(posedge tb_clk) ;
+							s_wr      = 1'b0 ;
+							s_w_data  = '0 ;
+						end
+
+						begin
+							@(posedge s_rd) ;
+							@(posedge tb_clk) ;
+							$display("[%0t] PULLED  : data = %d ", $time, s_r_data) ;
+							$display("[%0t] MONITORING: Empty = %d ; Full = %d ", $time, s_empty, s_full);
+							$display("[%0t] MONITORING: dut.read_ptr_reg = %d ", $time, dut.r_ptr_reg);
+						end
+					join
+				end
+			end
 
 		end
 

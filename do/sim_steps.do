@@ -1,1 +1,1 @@
-run -all
+run 35ns
