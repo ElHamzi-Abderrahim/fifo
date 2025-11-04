@@ -93,8 +93,13 @@
     // Current/Next state
     state_t state_reg, state_next ;
 
+    // Read/Write Enable signals
+    reg wr_en ;
+    reg rd_en ;
 
-    /* Next State Logic */
+
+    /***************** FSM section *********************/
+    // Next State Logic
     always_comb begin : next_state_logic
       case (state_reg)
         EMPTY_STATE: begin
@@ -161,7 +166,7 @@
       endcase
     end
     
-    /* State Register */
+    // State Register
     always_ff @( posedge clk, negedge reset_n ) begin : state_register
       if(!reset_n) begin
         state_reg  <= EMPTY_STATE ;
@@ -174,42 +179,45 @@
       end
     end
 
-    /* Output Logic (FSM Moore type) */
+    // Output Logic 
     always_comb begin : output_logic
-      w_ptr_plus_1 = w_ptr_reg + 1 ;
-      r_ptr_plus_1 = r_ptr_reg + 1 ;
-
-      r_ptr_next = r_ptr_reg ;
-      w_ptr_next = w_ptr_reg ;
-
-      r_data = '0 ; 
+      // Default values
+      wr_en = 1'b0 ;
+      rd_en = 1'b0 ;
 
       case (state_reg)
         EMPTY_STATE: begin
           empty = 1'b1 ;
           full  = 1'b0 ;
+          if(wr) begin
+            wr_en = 1'b1 ;
+          end else begin
+            wr_en = 1'b0 ;
+          end
         end
 
         WRITE_STATE: begin
-          empty                 = 1'b0 ;
-          full                  = 1'b0 ;
+          empty = 1'b0 ;
+          full  = 1'b0 ;
           if(wr) begin
-            array_reg[w_ptr_reg]  = w_data ;
-            w_ptr_next            = w_ptr_plus_1 ;
-          end 
+            wr_en = 1'b1 ;
+          end else begin
+            wr_en = 1'b0 ;
+          end
         end
 
         FULL_STATE: begin
-          full                  = 1'b1 ;
-          empty                 = 1'b0 ;
+          full  = 1'b1 ;
+          empty = 1'b0 ;
         end
 
         READ_STATE: begin
-          empty       = 1'b0 ;
-          full        = 1'b0 ;
+          empty   = 1'b0 ;
+          full    = 1'b0 ;
           if(rd) begin
-            r_data      = array_reg[r_ptr_reg];
-            r_ptr_next  = r_ptr_plus_1 ;\
+            rd_en = 1'b1 ;
+          end else begin
+            rd_en = 1'b0 ;
           end
         end
         default: begin
@@ -218,6 +226,31 @@
         end
       endcase
     end
+
+
+    /***************** R/W Controller section *********************/
+    always_comb begin : rw_array_controller
+      w_ptr_plus_1 = w_ptr_reg + 1 ;
+      r_ptr_plus_1 = r_ptr_reg + 1 ;
+
+      r_ptr_next = r_ptr_reg ;
+      w_ptr_next = w_ptr_reg ;
+
+      case({wr_en, rd_en})
+        2'b10: begin
+          array_reg[w_ptr_reg]  = w_data ;
+          w_ptr_next            = w_ptr_plus_1 ;
+        end 
+
+        2'b01: begin
+          r_data      = array_reg[r_ptr_reg];
+          r_ptr_next  = r_ptr_plus_1 ;
+        end
+      endcase
+    end
+
+
+
 
   endmodule
 

@@ -29,7 +29,10 @@
 		localparam 	CLK_PERIOD = 10;
 		localparam  INIT_DELAY_RST = 5; // Initial delay before deasserting the reset (e.g 5ns)
 		localparam  SIM_TIME = 400; 		// Simulation time
-
+		
+		/* Events */
+		event write_event ; // Triggered when write is performed
+		event read_event ;  // Triggered when read  is performed
 
 		/* Signals Declaration: */
 		// Clock and Reset:
@@ -125,18 +128,18 @@
 						// push data to the fifo
 						$display("[%0t] PUSHING : data = %d ", $time, rand_data);
 						
-						@(posedge tb_clk) ;
-						s_wr      = 1'b1 ;
+						@(negedge tb_clk) ;
 						s_w_data  = rand_data ;
-						@(posedge tb_clk) ;
-						@(posedge tb_clk) ;
+						s_wr      = 1'b1 ;
+						@(negedge tb_clk) ;
+						->write_event ;
 						s_wr      = 1'b0 ;
 						s_w_data  = '0 ;
+						@(posedge tb_clk) ;
 					end
 
 					begin // Monitor the DUT
-						@(posedge s_wr) ;
-						@(posedge tb_clk) ;
+						@(write_event.triggered) ;
 						$display("[%0t] MONITORING: Empty = %d ; Full = %d ", $time, s_empty, s_full);
 						$display("[%0t] MONITORING: dut.write_ptr_reg = %d ", $time, dut.w_ptr_reg);
 					end
