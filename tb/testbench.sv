@@ -12,7 +12,7 @@
 
 
 	// Macros Definitions:
-	`define YOUR_MACRO
+	`define DEBUG
 
 	`include "design.sv"
 	`include "tb_pkg.sv"
@@ -28,7 +28,7 @@
 		/* Local Parameters: */
 		localparam 	CLK_PERIOD = 10;
 		localparam  INIT_DELAY_RST = 5; // Initial delay before deasserting the reset (e.g 5ns)
-		localparam  SIM_TIME = 400; 		// Simulation time
+		localparam  SIM_TIME = 1000; 		// Simulation time
 		
 		/* Events */
 		event write_event ; // Triggered when write is performed
@@ -99,12 +99,6 @@
 			s_w_data	= '0 ;
 		end
 
-		/* Finishing the simulation after SIM_TIME delay */
-		initial begin
-			#(SIM_TIME) ;
-			$finish ;
-		end
-
 
 		/* Perfrom W/R operations */
 		initial begin
@@ -116,7 +110,7 @@
 			tb_resetn = 1;
 			
 			
-			for (int i = 0; i < (2**`ADDR_SIZE_B) ; i++ ) begin 
+			for (int i = 0; i < (2**`ADDR_SIZE_B + 10) ; i++ ) begin 
 				fork
 					begin // Write to the FIFO
 						// Generate random data
@@ -125,9 +119,11 @@
 						// push data to the queue
 						queue_fifo.push_front(rand_data) ;
 
-						// push data to the fifo
+					`ifdef DEBUG	
+						$display("+++++++++++++++++++++++++++++++++++++++++++++");
 						$display("[%0t] PUSHING : data = %d ", $time, rand_data);
-						
+					`endif // DEBUG
+						// push data to the fifo
 						@(negedge tb_clk) ;
 						s_w_data  = rand_data ;
 						s_wr      = 1'b1 ;
@@ -140,34 +136,60 @@
 
 					begin // Monitor the DUT
 						@(write_event.triggered) ;
+					`ifdef DEBUG	
 						$display("[%0t] MONITORING: Empty = %d ; Full = %d ", $time, s_empty, s_full);
 						$display("[%0t] MONITORING: dut.write_ptr_reg = %d ", $time, dut.w_ptr_reg);
+						$display("[%0t] MONITORING: dut.state_reg     = %0s ", $time, dut.state_reg.name());
+						$display("+++++++++++++++++++++++++++++++++++++++++++++");
+					`endif // DEBUG
 					end
 
 				join
 			end
 
-			for (int i = 0; i < (2**`ADDR_SIZE_B) ; i++ ) begin 
+		`ifdef DEBUG	
+			$display("+++++++++++++++++++++++++++++++++++++++++++++");
+			$display("[%0t] FIFO content   : %p ", $time, dut.array_reg) ;
+			$display("+++++++++++++++++++++++++++++++++++++++++++++");
+			$display("[%0t] QUEUE content  : %p ", $time, queue_fifo) ;
+			$display("+++++++++++++++++++++++++++++++++++++++++++++");
+		`endif // DEBUG
+
+			for (int i = 0; i < (2**`ADDR_SIZE_B + 10) ; i++ ) begin 
 				begin // READ to the FIFO
 					fork
 						begin
-							@(posedge tb_clk) ;
+							@(negedge tb_clk) ;
 							s_rd      = 1'b1 ;
+							@(negedge tb_clk) ;
+							->read_event ;
+							s_rd      = 1'b0 ;
 							@(posedge tb_clk) ;
-							s_wr      = 1'b0 ;
-							s_w_data  = '0 ;
 						end
 
-						begin
-							@(posedge s_rd) ;
-							@(posedge tb_clk) ;
+						begin // Monitor the DUT
+							@(read_event.triggered) ;
+							q_rd_data = queue_fifo.pop_back() ;
+							if((s_r_data != q_rd_data) && (s_empty != 1'b1)) begin
+								$display("[%0t] ERROR: NOT MATCHING DATA: FIFO_rdata = %d, QUEUE_rdata = %d ", $time, s_r_data, q_rd_data);
+							end
+						`ifdef DEBUG	
+							$display("+++++++++++++++++++++++++++++++++++++++++++++");
+							$display("[%0t] QUEUE content   : %p ", $time, queue_fifo) ;
+							$display("+++++++++++++++++++++++++++++++++++++++++++++");
 							$display("[%0t] PULLED  : data = %d ", $time, s_r_data) ;
+							$display("[%0t] QUEUE   : data = %d ", $time, q_rd_data) ;
 							$display("[%0t] MONITORING: Empty = %d ; Full = %d ", $time, s_empty, s_full);
 							$display("[%0t] MONITORING: dut.read_ptr_reg = %d ", $time, dut.r_ptr_reg);
+							$display("[%0t] MONITORING: dut.state_reg    = %0s ", $time, dut.state_reg.name());
+							$display("+++++++++++++++++++++++++++++++++++++++++++++");
+						`endif // DEBUG
 						end
 					join
 				end
 			end
+
+			$finish ;
 
 		end
 

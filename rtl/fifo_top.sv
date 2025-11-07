@@ -1,16 +1,19 @@
 /*
-   Date    		: 2025-10-27
-   Author  		: Abderrahim EL HAMZI.
-   Project 		: FIFO.  
-   Description	: Top module of the FIFO RTL block.
-   File    		: fifo_top.sv
+   Date         : 2025-10-27
+   Author       : Abderrahim EL HAMZI.
+   Project      : FIFO.  
+   Description  : Top module of the FIFO RTL block.
+   File         : fifo_top.sv
 */ 
 
 
 /* 
   NOTES:
-      O : Empty place
-      X : Full  place
+      Legend:
+        O : Empty place
+        X : Full  place
+        wr_ptr: The place to written to.
+        rd_ptr: The place to be read.
 
           rd_ptr
           wr_ptr
@@ -20,10 +23,7 @@
         |                                 |
         +---------------------------------+
 
-			rd_ptr: The place to be read.
-			wr_ptr: The place to written to.
-
-			- After performing 1 Write:
+      - After performing 1 Write:
         rd_ptr    wr_ptr
              |    |
              v    v
@@ -31,7 +31,7 @@
         |                                 |
         +---------------------------------+
 
-			- After performing 1 Read:
+      - After performing 1 Read:
                 rd_ptr
                 wr_ptr
                   |
@@ -40,8 +40,8 @@
         |                                 |
         +---------------------------------+
 
-			- Full state (One clock cycle before):
-			  The condition to detect Full state: (wr_ptr+1) == rd_ptr
+      - Full state (One clock cycle before):
+        The condition to detect Full state: (wr_ptr+1) == rd_ptr
                   wr_ptr    rd_ptr
                        |    |
                        v    v
@@ -50,7 +50,7 @@
         +---------------------------------+
       
       - Empty state (One clock cycle before):
-			  The condition to detect Full state: (rd_ptr+1) == wr_ptr
+        The condition to detect Full state: (rd_ptr+1) == wr_ptr
                   rd_ptr    wr_ptr
                        |    |
                        v    v
@@ -98,7 +98,7 @@
     reg rd_en ;
 
 
-    /***************** FSM section *********************/
+    /***************** FSM (Mealy & Moore) section *********************/
     // Next State Logic
     always_comb begin : next_state_logic
       case (state_reg)
@@ -128,7 +128,11 @@
               state_next = READ_STATE ;
             end
             default: 
-              state_next = WRITE_STATE ;
+              if(w_ptr_plus_1 == r_ptr_reg) begin
+                state_next = FULL_STATE ;
+              end else begin
+                state_next = WRITE_STATE ;
+              end
           endcase
         end
 
@@ -179,7 +183,7 @@
       end
     end
 
-    // Output Logic 
+    // Output Logic (Depends on the Currend state and the Input signals)
     always_comb begin : output_logic
       // Default values
       wr_en = 1'b0 ;
@@ -229,7 +233,7 @@
 
 
     /***************** R/W Controller section *********************/
-    always_comb begin : rw_array_controller
+    always_comb begin : rw_ctrl
       w_ptr_plus_1 = w_ptr_reg + 1 ;
       r_ptr_plus_1 = r_ptr_reg + 1 ;
 
@@ -248,8 +252,6 @@
         end
       endcase
     end
-
-
 
 
   endmodule
