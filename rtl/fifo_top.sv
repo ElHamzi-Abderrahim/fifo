@@ -88,7 +88,7 @@
     reg [ADDR_SIZE_B-1:0] w_ptr_reg, w_ptr_next, w_ptr_plus_1; 
 
     // State type
-    typedef enum logic [1:0] {EMPTY_STATE, WRITE_STATE, FULL_STATE, READ_STATE} state_t ;
+    typedef enum logic [2:0] {EMPTY_STATE, WRITE_STATE, FULL_STATE, READ_STATE, NOP_STATE} state_t ;
 
     // Current/Next state
     state_t state_reg, state_next ;
@@ -117,22 +117,23 @@
 
         WRITE_STATE: begin
           case({wr,rd})
-            2'b10 : begin
-              if(w_ptr_plus_1 == r_ptr_reg) begin
-                state_next = FULL_STATE ;
-              end else begin
-                state_next = WRITE_STATE ;
-              end
+            2'b10 : begin // when wr is asserted
+              state_next = WRITE_STATE ;
+              // if(w_ptr_plus_1 == r_ptr_reg) begin
+              //   state_next = FULL_STATE ;
+              // end else begin
+              //   state_next = WRITE_STATE ;
+              // end
+
             end 
-            2'b01 : begin
+            2'b01 : begin // when rd is asserted
               state_next = READ_STATE ;
             end
-            default: 
-              if(w_ptr_plus_1 == r_ptr_reg) begin
-                state_next = FULL_STATE ;
-              end else begin
-                state_next = WRITE_STATE ;
-              end
+            2'b00 : begin // when wr is deasserted
+              state_next = NOP_STATE ;
+            end
+            2'b11: // when wr and rd are asserted (R/W simultaneously NOT SUPPORTED )
+              state_next = state_reg ;
           endcase
         end
 
@@ -145,26 +146,53 @@
               state_next = FULL_STATE ;
             end
             default: 
-              state_next = FULL_STATE ;
+              state_next = state_reg ;
           endcase
         end
         
         READ_STATE: begin
           case({wr,rd})
-            2'b01 : begin
-              if(r_ptr_plus_1 == w_ptr_reg) begin
-                state_next = EMPTY_STATE ;
-              end else begin
-                state_next = READ_STATE ;
-              end
+            2'b01: begin // when rd asserted
+              state_next = READ_STATE ;
+              // if(r_ptr_plus_1 == w_ptr_reg) begin
+              //   state_next = EMPTY_STATE ;
+              // end else begin
+              //   state_next = READ_STATE ;
+              // end
             end 
-            2'b10 :  begin
+            2'b10: begin // when wr asserted
               state_next = WRITE_STATE ;
+            end
+            2'b00: begin // when rd deasserted
+              state_next = NOP_STATE ;
             end
             default: 
               state_next = READ_STATE ;
           endcase
         end 
+
+        NOP_STATE: begin
+          case({wr,rd})
+            2'b10: begin // when wr asserted
+              if(w_ptr_plus_1 == r_ptr_reg) begin
+                state_next = FULL_STATE ;
+              end else begin
+                state_next = WRITE_STATE ;
+              end
+            end
+            2'b01: begin // when rd asserted
+              if(r_ptr_plus_1 == w_ptr_reg) begin
+                state_next = EMPTY_STATE ;
+              end else begin
+                state_next = READ_STATE ;
+              end
+            end
+            default: begin // when wr and rd not asserted OR when both asserted
+              state_next = NOP_STATE ;
+            end
+          endcase
+        end
+
         default: 
           state_next = EMPTY_STATE ; 
       endcase
@@ -193,21 +221,24 @@
         EMPTY_STATE: begin
           empty = 1'b1 ;
           full  = 1'b0 ;
-          if(wr) begin
-            wr_en = 1'b1 ;
-          end else begin
-            wr_en = 1'b0 ;
-          end
+
+          // if(wr) begin
+          //   wr_en = 1'b1 ;
+          // end else begin
+          //   wr_en = 1'b0 ;
+          // end
         end
 
         WRITE_STATE: begin
           empty = 1'b0 ;
           full  = 1'b0 ;
-          if(wr) begin
-            wr_en = 1'b1 ;
-          end else begin
-            wr_en = 1'b0 ;
-          end
+          wr_en = 1'b1 ;
+          
+          // if(wr) begin
+          //   wr_en = 1'b1 ;
+          // end else begin
+          //   wr_en = 1'b0 ;
+          // end
         end
 
         FULL_STATE: begin
@@ -218,15 +249,24 @@
         READ_STATE: begin
           empty   = 1'b0 ;
           full    = 1'b0 ;
-          if(rd) begin
-            rd_en = 1'b1 ;
-          end else begin
-            rd_en = 1'b0 ;
-          end
+          rd_en = 1'b1 ;
+          // if(rd) begin
+          //   rd_en = 1'b1 ;
+          // end else begin
+          //   rd_en = 1'b0 ;
+          // end
         end
+        
+        NOP_STATE: begin
+          empty = 1'b0 ;
+          full  = 1'b0 ;
+          wr_en = 1'b0 ;
+          rd_en = 1'b0 ;
+        end
+
         default: begin
-          empty       = 1'b0 ;
-          full        = 1'b0 ;
+          empty = 1'b0 ;
+          full  = 1'b0 ;
         end
       endcase
     end

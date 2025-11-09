@@ -124,14 +124,15 @@
 						$display("[%0t] PUSHING : data = %d ", $time, rand_data);
 					`endif // DEBUG
 						// push data to the fifo
-						@(negedge tb_clk) ;
+						@(posedge tb_clk) ;
 						s_w_data  = rand_data ;
 						s_wr      = 1'b1 ;
-						@(negedge tb_clk) ;
-						->write_event ;
-						s_wr      = 1'b0 ;
-						s_w_data  = '0 ;
 						@(posedge tb_clk) ;
+						->write_event ;
+						@(posedge tb_clk) ;
+						s_wr      = 1'b0 ;
+						// s_w_data  = '0 ;
+						@(posedge tb_clk) ; 
 					end
 
 					begin // Monitor the DUT
@@ -159,9 +160,9 @@
 				begin // READ to the FIFO
 					fork
 						begin
-							@(negedge tb_clk) ;
+							@(posedge tb_clk) ;
 							s_rd      = 1'b1 ;
-							@(negedge tb_clk) ;
+							@(posedge tb_clk) ;
 							->read_event ;
 							s_rd      = 1'b0 ;
 							@(posedge tb_clk) ;
