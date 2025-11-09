@@ -128,11 +128,12 @@
 						s_w_data  = rand_data ;
 						s_wr      = 1'b1 ;
 						@(posedge tb_clk) ;
+						// @(posedge tb_clk) ;
 						->write_event ;
-						@(posedge tb_clk) ;
 						s_wr      = 1'b0 ;
-						// s_w_data  = '0 ;
+						s_w_data  = '0 ;
 						@(posedge tb_clk) ; 
+						@(posedge tb_clk) ;
 					end
 
 					begin // Monitor the DUT
