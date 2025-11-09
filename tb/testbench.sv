@@ -128,7 +128,6 @@
 						s_w_data  = rand_data ;
 						s_wr      = 1'b1 ;
 						@(posedge tb_clk) ;
-						// @(posedge tb_clk) ;
 						->write_event ;
 						s_wr      = 1'b0 ;
 						s_w_data  = '0 ;
@@ -141,7 +140,7 @@
 					`ifdef DEBUG	
 						$display("[%0t] MONITORING: Empty = %d ; Full = %d ", $time, s_empty, s_full);
 						$display("[%0t] MONITORING: dut.write_ptr_reg = %d ", $time, dut.w_ptr_reg);
-						$display("[%0t] MONITORING: dut.state_reg     = %0s ", $time, dut.state_reg.name());
+						// $display("[%0t] MONITORING: dut.state_reg     = %0s ", $time, dut.state_reg.name());
 						$display("+++++++++++++++++++++++++++++++++++++++++++++");
 					`endif // DEBUG
 					end
@@ -183,7 +182,7 @@
 							$display("[%0t] QUEUE   : data = %d ", $time, q_rd_data) ;
 							$display("[%0t] MONITORING: Empty = %d ; Full = %d ", $time, s_empty, s_full);
 							$display("[%0t] MONITORING: dut.read_ptr_reg = %d ", $time, dut.r_ptr_reg);
-							$display("[%0t] MONITORING: dut.state_reg    = %0s ", $time, dut.state_reg.name());
+							// $display("[%0t] MONITORING: dut.state_reg    = %0s ", $time, dut.state_reg.name());
 							$display("+++++++++++++++++++++++++++++++++++++++++++++");
 						`endif // DEBUG
 						end

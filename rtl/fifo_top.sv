@@ -97,154 +97,23 @@
     reg wr_en ;
     reg rd_en ;
 
+    // empty/full reg signals
+    reg empty_next, empty_reg ;
+    reg full_next,  full_reg ;
 
-    /***************** FSM (Mealy & Moore) section *********************/
-    // Next State Logic
-    always_comb begin : next_state_logic
-      case (state_reg)
-        EMPTY_STATE: begin
-          case({wr,rd})
-            2'b10 : begin
-            state_next = RW_STATE ;
-            end 
-            2'b01 : begin
-              state_next = EMPTY_STATE ;
-            end
-            default: 
-              state_next = EMPTY_STATE ;
-          endcase
-        end
 
-        RW_STATE: begin
-          if( wr && (w_ptr_plus_1 == r_ptr_reg) ) begin // when full condition achieved
-            state_next = FULL_STATE ;     
-          end
-          else if( rd && (r_ptr_plus_1 == w_ptr_reg) ) begin // when empty condition achieved
-            state_next = EMPTY_STATE ;     
-          end 
-          else begin // when non of full/empty condition are achieved
-            if(wr | rd) begin // when wr or rd or both asserted
-              state_next = RW_STATE ;     
-            end
-            else begin // when non of wr or rd is asserted
-              state_next = NOP_STATE ;
-            end
-          end
-          
-        `ifdef CASE_USAGE
-          case({wr,rd})
-            2'b10 : begin // when wr is asserted
-              if(w_ptr_plus_1 == r_ptr_reg) begin
-                state_next = FULL_STATE ;
-              end else begin
-                state_next = RW_STATE ;
-              end
-            end 
-            2'b01 : begin // when rd is asserted
-              if(r_ptr_plus_1 == w_ptr_reg) begin
-                state_next = EMPTY_STATE ;
-              end else begin
-                state_next = RW_STATE ;
-              end
-            end
-            2'b00 : begin // when wr is deasserted
-              state_next = NOP_STATE ;
-            end
-            2'b11: // when wr and rd are asserted
-              if(w_ptr_plus_1 == r_ptr_reg) begin // When the Full Condition is satisfied
-                state_next = FULL_STATE ;
-              end 
-              else if(r_ptr_plus_1 == w_ptr_reg) begin // When the Empty Condition is satisfied
-                state_next = EMPTY_STATE ;
-              end 
-              else begin // No Empty/Full condition is satisfied
-                state_next = RW_STATE ;
-              end
-          endcase
-        `endif // CASE_USAGE
+    /* W/R enable control logic */
+    assign wr_en = (~full_reg  & wr) ; 
+    assign rd_en = (~empty_reg & rd) ; 
 
-        end
-
-        FULL_STATE: begin
-          case({wr,rd})
-            2'b01 : begin
-            state_next = RW_STATE ;
-            end 
-            2'b10 :  begin
-              state_next = FULL_STATE ;
-            end
-            default: 
-              state_next = state_reg ;
-          endcase
-        end
-      
-        NOP_STATE: begin
-          if (wr | rd) begin // when wr or rd or both asserted
-            state_next = RW_STATE ;
-          end else begin
-            state_next = NOP_STATE ;
-          end
-        end
-
-      endcase
-    end
     
-    // State Register
-    always_ff @( posedge clk, negedge reset_n ) begin : state_register
-      if(!reset_n) begin
-        state_reg  <= EMPTY_STATE ;
-        r_ptr_reg  <= '0 ;
-        w_ptr_reg  <= '0 ;
-      end else begin
-        state_reg  <= state_next ;
-        r_ptr_reg  <= r_ptr_next ;
-        w_ptr_reg  <= w_ptr_next ;
-      end
-    end
-
-    // Output Logic (Depends on the Currend state and the Input signals)
-    always_comb begin : output_logic
-      // Default values
-      wr_en = 1'b0 ;
-      rd_en = 1'b0 ;
-
-      case (state_reg)
-        EMPTY_STATE: begin
-          empty = 1'b1 ;
-          full  = 1'b0 ;
-          wr_en = wr ;
-        end
-
-        RW_STATE: begin
-          empty = 1'b0 ;
-          full  = 1'b0 ;
-          wr_en = wr ;
-          rd_en = rd ;
-        end
-
-        FULL_STATE: begin
-          full  = 1'b1 ;
-          empty = 1'b0 ;
-          rd_en = rd ;
-        end
-        
-        NOP_STATE: begin
-          empty = 1'b0 ;
-          full  = 1'b0 ;
-          wr_en = wr ;
-          rd_en = rd ;
-        end
-
-        default: begin
-          empty = 1'b0 ;
-          full  = 1'b0 ;
-        end
-      endcase
-    end
+    /* Assign empty/full to output signal */
+    assign empty = empty_reg  ;
+    assign full  = full_reg   ;
 
 
-    /***************** R/W Controller section *********************/
-    always_comb begin : rw_ctrl
+    /* Access to array_reg and ptr incremter logic */
+    always_comb begin
       w_ptr_plus_1 = w_ptr_reg + 1 ;
       r_ptr_plus_1 = r_ptr_reg + 1 ;
 
@@ -253,23 +122,53 @@
 
       r_data      = array_reg[r_ptr_reg];
 
+      full_next   = full_reg  ;
+      empty_next  = empty_reg ;
+      
       case({wr_en, rd_en})
         2'b10: begin // when wr enable asserted
           array_reg[w_ptr_reg]  = w_data ;
           w_ptr_next            = w_ptr_plus_1 ;
+          full_next   = (w_ptr_plus_1 == r_ptr_reg) ? 1'b1 : 1'b0 ;
+          empty_next  = 1'b0 ;
         end 
-
         2'b01: begin  // when rd enable asserted
           r_ptr_next  = r_ptr_plus_1 ;
+          empty_next  = (r_ptr_plus_1 == w_ptr_reg) ? 1'b1 : 1'b0 ;
+          full_next   = 1'b0 ;
         end
-
         2'b11: begin // when wr and rd enable asserted
           array_reg[w_ptr_reg]  = w_data ;
           w_ptr_next            = w_ptr_plus_1 ;
           r_ptr_next            = r_ptr_plus_1 ;
+          full_next             = (w_ptr_plus_1 == r_ptr_reg) ? 1'b1 : 1'b0 ;
+          empty_next            = (r_ptr_plus_1 == w_ptr_reg) ? 1'b1 : 1'b0 ;
+        end
+        default: begin
+          full_next   = full_reg  ;
+          empty_next  = empty_reg ;
+          r_ptr_next  = r_ptr_reg ;
+          w_ptr_next  = w_ptr_reg ;
         end
       endcase
     end
+
+
+    /*   Sequential Logic   */
+    always_ff @(posedge clk, negedge reset_n) begin
+      if(!reset_n) begin
+        w_ptr_reg <= '0 ;
+        r_ptr_reg <= '0 ;
+        empty_reg <= 1'b1 ;
+        full_reg  <= 1'b0 ;
+      end else begin
+        w_ptr_reg <= w_ptr_next ;
+        r_ptr_reg <= r_ptr_next ;
+        empty_reg <= empty_next ;
+        full_reg  <= full_next  ;
+      end
+    end
+
 
 
   endmodule
