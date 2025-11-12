@@ -1,2 +1,2 @@
-run 200ns
-# run -all
+# run 720 ns
+run -all

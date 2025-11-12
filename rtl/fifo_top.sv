@@ -87,12 +87,6 @@
     reg [ADDR_SIZE_B-1:0] r_ptr_reg, r_ptr_next, r_ptr_plus_1; 
     reg [ADDR_SIZE_B-1:0] w_ptr_reg, w_ptr_next, w_ptr_plus_1; 
 
-    // State type
-    typedef enum logic [2:0] {EMPTY_STATE, RW_STATE, FULL_STATE, NOP_STATE} state_t ;
-
-    // Current/Next state
-    state_t state_reg, state_next ;
-
     // Read/Write Enable signals
     reg wr_en ;
     reg rd_en ;
@@ -112,30 +106,43 @@
     assign full  = full_reg   ;
 
 
-    /* Access to array_reg and ptr incremter logic */
+    /* Logic for :
+        - Access to array_reg; 
+        - Incrementing the r/w pointer; and 
+        - Detecting Empty/Full states.
+    */
     always_comb begin
       w_ptr_plus_1 = w_ptr_reg + 1 ;
       r_ptr_plus_1 = r_ptr_reg + 1 ;
 
-      r_ptr_next = r_ptr_reg ;
-      w_ptr_next = w_ptr_reg ;
-
+      // Always output the value to which the read pointer pointed to
       r_data      = array_reg[r_ptr_reg];
 
+      // Default values
+      r_ptr_next = r_ptr_reg ;
+      w_ptr_next = w_ptr_reg ;
       full_next   = full_reg  ;
       empty_next  = empty_reg ;
       
       case({wr_en, rd_en})
         2'b10: begin // when wr enable asserted
+          // Performing a write will cause the FIFO to not be empty
+          empty_next  = 1'b0 ;
+          // Write the data to the array, and increment the WR pointer
           array_reg[w_ptr_reg]  = w_data ;
           w_ptr_next            = w_ptr_plus_1 ;
+          // If the next write_pointer will point to the current read_pointer, 
+          //    that means that the FIFO will be full (Check the comments in the
+          //    beginning of this code).
           full_next   = (w_ptr_plus_1 == r_ptr_reg) ? 1'b1 : 1'b0 ;
-          empty_next  = 1'b0 ;
         end 
         2'b01: begin  // when rd enable asserted
-          r_ptr_next  = r_ptr_plus_1 ;
-          empty_next  = (r_ptr_plus_1 == w_ptr_reg) ? 1'b1 : 1'b0 ;
+          // Performing a read will cause the FIFO to not be full
           full_next   = 1'b0 ;
+          r_ptr_next  = r_ptr_plus_1 ;
+          // If the next read_pointer will point to the current write_pointer, 
+          //    that means that the FIFO will be empty.
+          empty_next  = (r_ptr_plus_1 == w_ptr_reg) ? 1'b1 : 1'b0 ;
         end
         2'b11: begin // when wr and rd enable asserted
           array_reg[w_ptr_reg]  = w_data ;
@@ -144,7 +151,7 @@
           full_next             = (w_ptr_plus_1 == r_ptr_reg) ? 1'b1 : 1'b0 ;
           empty_next            = (r_ptr_plus_1 == w_ptr_reg) ? 1'b1 : 1'b0 ;
         end
-        default: begin
+        default: begin // Default values as a good practice
           full_next   = full_reg  ;
           empty_next  = empty_reg ;
           r_ptr_next  = r_ptr_reg ;

@@ -1,11 +1,15 @@
 /*
-   Date    			: 2025-10-27
-   Author  			: Abderrahim EL HAMZI.
-   Project 			: fifo.  
-   Description	: Circular-queue-based implementation of a FIFO. 
-   File    			: testbench.v
+	Date    			: 2025-10-27
+	Author  			: Abderrahim EL HAMZI.
+	Project 			: fifo.  
+	Description	: Testbench for a Circular-queue-based implementation of a FIFO. 
+	File    			: testbench.v
 */ 
 
+/*
+	NOTES:
+
+*/
 
 `ifndef TESTBENCH_SV
 	`define TESTBENCH_SV
@@ -13,6 +17,7 @@
 
 	// Macros Definitions:
 	`define DEBUG
+	`define DETAIL_DEBUG
 
 	`include "design.sv"
 	`include "tb_pkg.sv"
@@ -50,19 +55,25 @@
 
 		/* Local Variables to be used to stimulate the DUT */
 		// Queue as ref module for the FIFO
-		bit [`WORD_LENGTH-1:0] queue_fifo[$:(2**`ADDR_SIZE_B)-1] ;
+		localparam int unsigned queue_size = 2**`ADDR_SIZE_B ;
+		bit [`WORD_LENGTH-1:0] queue_fifo[$:queue_size-1] ;
 
-		// Write/Read data to/from the queue
+		// Write/Read data to/from the queue signals
 		bit [`WORD_LENGTH-1:0] q_wr_data ;
 		bit [`WORD_LENGTH-1:0] q_rd_data ;
 
-		// Write/Read data to/from the FIFO
-		reg [`WORD_LENGTH-1:0] fifo_wr_data ;
+		// Readed data from the FIFO signal
 		reg [`WORD_LENGTH-1:0] fifo_rd_data ;
 
 		// Variable to hold random data
 		bit [`WORD_LENGTH-1:0] rand_data ;
 
+		// Variables for test statistics
+		int unsigned total_access = 0 ;
+		int unsigned failed_read  = 0 ;
+		int unsigned failed_write = 0 ;
+		int unsigned passed_read  = 0 ;
+		int unsigned passed_write = 0 ;
 
 		/* Clock generator */
 		initial tb_clk = 0 ;
@@ -99,6 +110,82 @@
 			s_w_data	= '0 ;
 		end
 
+		/* Verbosity degree for printing messages  
+			- Levels of Verbosity
+					1: Print messages with type FAILED/ERROR
+					2: Print messages with type PASSED + Message with lower number (1)
+					3: Print messages with type INFO   + Message with lower number (1 and 2)
+		*/
+		int unsigned message_verbosity = 1 ;
+		
+		/* Tasks and Functions */
+		// Function to print Info/Error/Failed/Success messages based on verbosity
+		function void message_display(string type_message , string message);
+			// Checker for the type of the message
+			if(type_message != "FAILED" && type_message != "ERROR" && type_message != "PASSED" && type_message != "INFO") begin
+				$display("ALGO-ERROR: The function message_display(type_message,...) type_message=(%0s) parameter is not supported", type_message) ;
+				$display("ALGO-INFO : The supported types are : \"FAILED\" or \"ERROR\" or \"PASSED\" or \"INFO\".") ;
+			end
+
+			if(message_verbosity >= 3) begin
+				$display("[%0t] %0s: %s", $time, type_message, message) ;
+			end 
+			else if (message_verbosity == 2) begin
+				if(type_message == "FAILED" || type_message == "ERROR" || type_message == "PASSED") begin
+					$display("[%0t] %0s: %s", $time, type_message, message) ;
+				end
+			end
+			else if (message_verbosity == 1) begin
+				if(type_message == "FAILED" || type_message == "ERROR") begin
+					$display("[%0t] %0s: %s", $time, type_message, message) ;
+				end
+			end
+		endfunction
+
+  	// Task that performs write to the FIFO
+		task write_to_fifo ( input [`WORD_LENGTH-1:0] data, input int post_drive_delay) ;
+			// Perform Write
+			@(posedge tb_clk) ;
+			s_wr      = 1'b1 ;
+			s_w_data  = data ;
+			// idle state of signals
+			@(posedge tb_clk) ;
+			// ->write_event ;
+			s_wr      = 1'b0; 
+			s_w_data  = '0 ;
+			repeat(post_drive_delay) @(posedge tb_clk) ;
+  	endtask: write_to_fifo
+
+		// Task that performs read from the FIFO
+		task read_from_fifo ( output [`WORD_LENGTH-1:0] data) ;
+			// Perform Read
+			@(posedge tb_clk) ;
+			s_rd      = 1'b1 ; 
+			data      = s_r_data ;
+			// idle state of signals
+			@(posedge tb_clk) ;
+			->read_event ;
+			s_rd      = 1'b0;
+		endtask: read_from_fifo
+
+		// Function for checking non matching data
+		function bit check_missmatch( bit[`WORD_LENGTH-1:0] fifo_pop_data, bit[`WORD_LENGTH-1:0] queue_pop_data);
+			if(queue_pop_data != fifo_pop_data) begin
+				$display("[%0t] FAILED: Data Missmatch FIFO (0x%0h) , QUEUE-REF-MODEL (0x%0h). \n", 
+									$time, fifo_pop_data, queue_pop_data) ; 
+				return 1'b0 ;
+			end	
+			else begin
+			`ifdef DETAIL_DEBUG
+				message_display("PASSED", 
+												$sformatf("Data Matching (0x%0h).\n", 
+																	queue_pop_data) ) ;
+			`endif // DETAIL_DEBUG
+				return 1'b1 ;
+			end
+		endfunction : check_missmatch
+
+
 
 		/* Perfrom W/R operations */
 		initial begin
@@ -110,85 +197,107 @@
 			tb_resetn = 1;
 			
 			
+			$display("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++");
+			$display("[%0t] Start of WRITING tests", $time) ;
+			$display("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++");
 			for (int i = 0; i < (2**`ADDR_SIZE_B + 10) ; i++ ) begin 
-				fork
-					begin // Write to the FIFO
-						// Generate random data
-						rand_data = $urandom_range(0, (2**`WORD_LENGTH)-1) ;
-						
-						// push data to the queue
-						queue_fifo.push_front(rand_data) ;
+				begin // Write to the FIFO
+					// Generate random data
+					rand_data = $urandom_range(0, (2**`WORD_LENGTH)-1) ;						
+				
+					message_display("INFO", 
+													$sformatf("PUSHING data = %d to the FIFO and the QUEUE(ref. model).", 
+																		rand_data) ) ;
 
-					`ifdef DEBUG	
-						$display("+++++++++++++++++++++++++++++++++++++++++++++");
-						$display("[%0t] PUSHING : data = %d ", $time, rand_data);
-					`endif // DEBUG
-						// push data to the fifo
-						@(posedge tb_clk) ;
-						s_w_data  = rand_data ;
-						s_wr      = 1'b1 ;
-						@(posedge tb_clk) ;
-						->write_event ;
-						s_wr      = 1'b0 ;
-						s_w_data  = '0 ;
-						@(posedge tb_clk) ; 
-						@(posedge tb_clk) ;
-					end
-
-					begin // Monitor the DUT
-						@(write_event.triggered) ;
-					`ifdef DEBUG	
-						$display("[%0t] MONITORING: Empty = %d ; Full = %d ", $time, s_empty, s_full);
-						$display("[%0t] MONITORING: dut.write_ptr_reg = %d ", $time, dut.w_ptr_reg);
-						// $display("[%0t] MONITORING: dut.state_reg     = %0s ", $time, dut.state_reg.name());
-						$display("+++++++++++++++++++++++++++++++++++++++++++++");
-					`endif // DEBUG
-					end
-
-				join
+					// push data to the queue
+					if(i < queue_size) queue_fifo.push_front(rand_data) ;
+					// Push the data to the FIFO
+					write_to_fifo(.data(rand_data), .post_drive_delay(2)) ;
+				end
 			end
+			$display("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++");
+			$display("[%0t] End of WRITING tests", $time) ;
+			$display("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++");
 
-		`ifdef DEBUG	
-			$display("+++++++++++++++++++++++++++++++++++++++++++++");
-			$display("[%0t] FIFO content   : %p ", $time, dut.array_reg) ;
-			$display("+++++++++++++++++++++++++++++++++++++++++++++");
-			$display("[%0t] QUEUE content  : %p ", $time, queue_fifo) ;
-			$display("+++++++++++++++++++++++++++++++++++++++++++++");
-		`endif // DEBUG
 
+			// Display the content of the FIFO and the ref model
+			message_display("INFO", $sformatf("FIFO content   : %p ", dut.array_reg)) ;
+			message_display("INFO", $sformatf("FIFO content   : %p ", queue_fifo)) ;
+
+
+
+
+			$display("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++");
+			$display("[%0t] Start of READING tests", $time) ;
+			$display("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++");
 			for (int i = 0; i < (2**`ADDR_SIZE_B + 10) ; i++ ) begin 
-				begin // READ to the FIFO
+				begin // READ from the FIFO
 					fork
 						begin
-							@(posedge tb_clk) ;
-							s_rd      = 1'b1 ;
+							read_from_fifo(.data(fifo_rd_data)) ;
+							q_rd_data = queue_fifo.pop_back() ;
+							if(!s_empty) begin
+								failed_read = (check_missmatch(.fifo_pop_data(fifo_rd_data), .queue_pop_data(q_rd_data)))
+															? failed_read : (failed_read+1) ;
+							end
+							// Trigger the event of read after one clock cycle in order to wait for the dut 
+							//  to update its state after that clock cycle which comes after performing the
+							//  Read access that causes the FIFO to be empty. 
 							@(posedge tb_clk) ;
 							->read_event ;
-							s_rd      = 1'b0 ;
-							@(posedge tb_clk) ;
 						end
-
-						begin // Monitor the DUT
-							@(read_event.triggered) ;
-							q_rd_data = queue_fifo.pop_back() ;
-							if((s_r_data != q_rd_data) && (s_empty != 1'b1)) begin
-								$display("[%0t] ERROR: NOT MATCHING DATA: FIFO_rdata = %d, QUEUE_rdata = %d ", $time, s_r_data, q_rd_data);
+						begin
+							wait(read_event.triggered) ; // Wait for read access to end.
+							total_access += 1 ;
+							if(queue_fifo.size() == 0) begin
+								if(s_empty==1'b0)begin
+									failed_read += 1 ;
+									message_display( "FAILED", 
+																		$sformatf("FIFO should be empty and Empty signal (=0x%0h) should not be asserted. ", 
+																							s_empty) );
+								end else begin
+									passed_read += 1 ;
+									message_display("PASSED", 
+																	$sformatf("FIFO is empty and Empty signal (=0x%0h) is asserted. ", 
+																						s_empty) ) ;
+								end
+							end else begin
+								if(s_empty==1'b0)begin
+									passed_read += 1 ;
+									message_display("PASSED", 
+																	$sformatf("FIFO is not empty and Empty signal (=0x%0h) is not asserted.", 
+																						s_empty) ) ;
+								end else begin
+									failed_read += 1 ;
+									message_display("FAILED", 
+																	$sformatf("FIFO is not empty and Empty signal (=0x%0h) should not be asserted.", 
+																						s_empty) ) ;
+								end
 							end
-						`ifdef DEBUG	
-							$display("+++++++++++++++++++++++++++++++++++++++++++++");
-							$display("[%0t] QUEUE content   : %p ", $time, queue_fifo) ;
-							$display("+++++++++++++++++++++++++++++++++++++++++++++");
-							$display("[%0t] PULLED  : data = %d ", $time, s_r_data) ;
-							$display("[%0t] QUEUE   : data = %d ", $time, q_rd_data) ;
-							$display("[%0t] MONITORING: Empty = %d ; Full = %d ", $time, s_empty, s_full);
-							$display("[%0t] MONITORING: dut.read_ptr_reg = %d ", $time, dut.r_ptr_reg);
-							// $display("[%0t] MONITORING: dut.state_reg    = %0s ", $time, dut.state_reg.name());
-							$display("+++++++++++++++++++++++++++++++++++++++++++++");
-						`endif // DEBUG
 						end
 					join
 				end
 			end
+			$display("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++");
+			$display("[%0t] End of READING tests", $time) ;
+			$display("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++");
+			
+			
+			
+			
+			$display("\n") ;
+			$display("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++");
+			$display("+-----------------------------------------------------------------");
+			$display("| TEST REPORT (total access of %01d)", total_access) ;
+			$display("|   + Passed READ  : %0d ", passed_read ) ;
+			$display("|   + Passed WRITE : %0d ", passed_write) ;
+			$display("|   - Failed READ  : %0d ", failed_read ) ;
+			$display("|   - Failed WRITE : %0d ", failed_write) ;
+			$display("|  Statistics (%%):  ") ;
+			$display("|   + Passed WRITE : %0d %% ", ((passed_write/total_access)*100)) ;
+			$display("|   + Passed READ  : %0d %% ", ((passed_read/total_access)*100) ) ;
+			$display("+-----------------------------------------------------------------");
+			$display("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n\n");
 
 			$finish ;
 
