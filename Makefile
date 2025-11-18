@@ -60,6 +60,7 @@ SIM_ARGS += testbench
 SIM_ARGS += -do "set gui_mode $(GUI);"
 SIM_ARGS += -do $(DO_DIR)/waves.do
 SIM_ARGS += -do $(DO_DIR)/sim_steps.do
+SIM_ARGS += -fsmdebug
 
 
 
