@@ -1,14 +1,20 @@
 # About:
-This is a project template for all my RTL project, which will be used to create the initial repo for each RTL project. 
+This is a circular buffer based FIFO implementation using SystemVerilog.
 
-# Project Status: 
-- Under Dev.
+## Project Status: 
+- Basic implementation is finished, with some basic tests and checkers to verify the basic functionality of the FIFO.
+
+## Upcoming Work: 
+- Perform more functional verification using either OOP concepts of SysVerilog or UVM, in order to have more flexibility on Verification work.
+- Synthesis the RTL code using VIVADO Tool, or online tool EDAPlayGround.
 
 ## Project Structure: 
     ./
     ├── do
     │   ├── sim_steps.do
     │   └── waves.do
+    ├── doc
+    |   └── fifo_block.drawio
     ├── Makefile
     ├── README.md
     ├── sim
@@ -17,10 +23,13 @@ This is a project template for all my RTL project, which will be used to create 
     │   ├── dummy_module.v
     │   └── filelist.f
     └── tb
-        ├── filelist.f
-        ├── other_pkgs.sv
-        ├── tb_defines.sv
-        ├── tb_pkg.sv
-        └── testbench.sv
+       ├── filelist.f
+       ├── tb_defines.sv
+       ├── tb_pkg.sv
+       ├── tb_tasks.sv
+       └── testbench.sv
+
+## Contacts:
+- abderrahimelhamzi.dev@gmail.com
 
 
