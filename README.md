@@ -1,6 +1,9 @@
 # About:
 This is a circular buffer based FIFO implementation using SystemVerilog.
 
+![fifo_block](doc/fifo_block.jpg)
+
+
 ## Project Status: 
 - Basic implementation is finished, with some basic tests and checkers to verify the basic functionality of the FIFO.
 
@@ -8,7 +11,7 @@ This is a circular buffer based FIFO implementation using SystemVerilog.
 - Perform more functional verification using either OOP concepts of SysVerilog or UVM, in order to have more flexibility on Verification work.
 - Synthesis the RTL code using VIVADO Tool, or online tool EDAPlayGround.
 
-## Project Structure: 
+## File Structure: 
     ./
     ├── do
     │   ├── sim_steps.do
