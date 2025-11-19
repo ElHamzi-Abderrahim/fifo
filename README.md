@@ -1,3 +1,4 @@
+**Release:** `v1.0.0`
 
 # About:
 This is a circular buffer based FIFO implementation using SystemVerilog.
